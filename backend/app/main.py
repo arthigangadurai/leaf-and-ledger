@@ -20,10 +20,9 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
-        "http://127.0.0.1:8000",
-        "https://frontend-8u9pxe8na-arthigs-projects.vercel.app",
-        "https://frontend-bs6dv7qy5-arthigs-projects.vercel.app",
-        "https://frontend-defb6k1a0-arthigs-projects.vercel.app",
+        "http://127.0.0.1:5173",
+        "https://frontend-d7cc2xk61-arthigs-projects.vercel.app/",
+        "https://leaf-ledger-backend.onrender.com",
     ],
     allow_credentials=True,
     allow_methods=["*"],
