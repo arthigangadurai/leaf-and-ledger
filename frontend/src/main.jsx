@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import './styles.css'
 
-const API = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
+const API = import.meta.env.VITE_API_URL || 'https://leaf-ledger-backend.onrender.com'
 const FALLBACK_COVER = 'https://placehold.co/400x560/e8eee8/31564a?text=Book+Cover'
 
 function App() {
