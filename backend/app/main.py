@@ -14,12 +14,14 @@ from .schemas import RegisterIn, LoginIn, UserOut, TokenOut, BookIn, BookOut, Bo
 from .security import hash_password, verify_password, create_access_token, get_current_user, require_admin
 from fastapi.security import OAuth2PasswordRequestForm
 
-app = FastAPI(title="Library Management API", version="1.0.0")
+app = FastAPI(title="Library Management API", version="1.0")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "https://frontend-8u9pxe8na-arthigs-projects.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -36,41 +38,79 @@ def root():
 
 @app.post("/auth/register", response_model=UserOut, status_code=201)
 def register(payload: RegisterIn, db: Session = Depends(get_db)):
-    email = payload.email.lower()
+    email = payload.email.strip().lower()
+
     if db.scalar(select(User).where(User.email == email)):
         raise HTTPException(status_code=409, detail="Email is already registered")
-    user = User(name=payload.name.strip(), email=email, password_hash=hash_password(payload.password))
+
+    user = User(
+        name=payload.name.strip(),
+        email=email,
+        password_hash=hash_password(payload.password)
+    )
+
     db.add(user)
+
     try:
         db.commit()
         db.refresh(user)
     except IntegrityError:
         db.rollback()
         raise HTTPException(status_code=409, detail="Email is already registered")
-    return user
 
+    return user
 @app.post("/auth/login", response_model=TokenOut)
 def login(payload: LoginIn, db: Session = Depends(get_db)):
-    user = db.scalar(select(User).where(User.email == payload.email.lower()))
-    if not user or not verify_password(payload.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
-    return {"access_token": create_access_token(user), "user": user}
+    email = payload.email.strip().lower()
 
-def _reset_code_digest(code: str) -> str:
-    # HMAC prevents a database-only leak from making six-digit codes easy to brute-force.
-    return hmac.new(settings.secret_key.encode(), code.encode(), hashlib.sha256).hexdigest()
+    user = db.scalar(select(User).where(User.email == email))
+
+    if not user or not verify_password(payload.password, user.password_hash):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid email or password"
+        )
+
+    return {
+        "access_token": create_access_token(user),
+        "token_type": "bearer",
+        "user": user
+    }
+
 @app.post("/auth/token")
 def swagger_login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
+    print("DATABASE:", db.execute(
+    select(func.current_database())
+).scalar())
+    email = form_data.username.strip().lower()
+
     user = db.scalar(
-        select(User).where(User.email == form_data.username.lower())
+        select(User).where(User.email == email)
     )
 
-    if not user or not verify_password(
-        form_data.password, user.password_hash
-    ):
+    print("EMAIL ENTERED:", email)
+    print("USER FOUND:", user is not None)
+
+    if user:
+        print("USER ROLE:", user.role)
+
+        password_valid = verify_password(
+            form_data.password,
+            user.password_hash
+        )
+
+        print("PASSWORD MATCH:", password_valid)
+
+        if not password_valid:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid email or password",
+                headers={"WWW-Authenticate": "Bearer"}
+            )
+    else:
         raise HTTPException(
             status_code=401,
             detail="Invalid email or password",
@@ -97,7 +137,8 @@ def password_reset_request(email: str = Query(...), db: Session = Depends(get_db
 
 @app.post("/auth/password-reset-confirm")
 def password_reset_confirm(payload: PasswordResetConfirmIn, db: Session = Depends(get_db)):
-    user = db.scalar(select(User).where(User.email == payload.email.lower()))
+    email = payload.email.strip().lower()
+    user = db.scalar(select(User).where(User.email == email))  
     if not user or not user.reset_code_hash or not user.reset_code_expires_at:
         raise HTTPException(status_code=400, detail="Invalid or expired reset code")
     digest = _reset_code_digest(payload.code)
